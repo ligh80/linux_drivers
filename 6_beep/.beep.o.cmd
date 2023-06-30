@@ -1,8 +1,8 @@
-cmd_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o := arm-linux-gnueabihf-gcc -Wp,-MD,/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/.dtsof.o.d  -nostdinc -isystem /usr/local/arm/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.4/include -I./arch/arm/include -Iarch/arm/include/generated/uapi -Iarch/arm/include/generated  -Iinclude -I./arch/arm/include/uapi -Iarch/arm/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -fno-dwarf2-cfi-asm -fno-ipa-sra -mabi=aapcs-linux -mno-thumb-interwork -mfpu=vfp -funwind-tables -marm -D__LINUX_ARM_ARCH__=7 -march=armv7-a -msoft-float -Uarm -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -fno-var-tracking-assignments -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO  -DMODULE  -D"KBUILD_STR(s)=\#s" -D"KBUILD_BASENAME=KBUILD_STR(dtsof)"  -D"KBUILD_MODNAME=KBUILD_STR(dtsof)" -c -o /home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/.tmp_dtsof.o /home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.c
+cmd_/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o := arm-linux-gnueabihf-gcc -Wp,-MD,/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/.beep.o.d  -nostdinc -isystem /usr/local/arm/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.4/include -I./arch/arm/include -Iarch/arm/include/generated/uapi -Iarch/arm/include/generated  -Iinclude -I./arch/arm/include/uapi -Iarch/arm/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -fno-dwarf2-cfi-asm -fno-ipa-sra -mabi=aapcs-linux -mno-thumb-interwork -mfpu=vfp -funwind-tables -marm -D__LINUX_ARM_ARCH__=7 -march=armv7-a -msoft-float -Uarm -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -fno-var-tracking-assignments -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO  -DMODULE  -D"KBUILD_STR(s)=\#s" -D"KBUILD_BASENAME=KBUILD_STR(beep)"  -D"KBUILD_MODNAME=KBUILD_STR(beep)" -c -o /home/ligh/linux/IMX6ULL/linux_drivers/6_beep/.tmp_beep.o /home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.c
 
-source_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o := /home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.c
+source_/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o := /home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.c
 
-deps_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o := \
+deps_/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o := \
   include/linux/types.h \
     $(wildcard include/config/uid16.h) \
     $(wildcard include/config/lbdaf.h) \
@@ -909,15 +909,12 @@ deps_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o := \
   include/linux/gpio/consumer.h \
     $(wildcard include/config/gpio/sysfs.h) \
   include/linux/cdev.h \
-  arch/arm/include/asm/mach/map.h \
-    $(wildcard include/config/debug/ll.h) \
   include/linux/of_address.h \
     $(wildcard include/config/of/address.h) \
-  include/linux/of_irq.h \
-    $(wildcard include/config/ppc32.h) \
-    $(wildcard include/config/ppc/pmac.h) \
-    $(wildcard include/config/of/irq.h) \
+  include/linux/of_gpio.h \
+  arch/arm/include/asm/mach/map.h \
+    $(wildcard include/config/debug/ll.h) \
 
-/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o: $(deps_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o)
+/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o: $(deps_/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o)
 
-$(deps_/home/ligh/linux/IMX6ULL/linux_drivers/4_dtsof/dtsof.o):
+$(deps_/home/ligh/linux/IMX6ULL/linux_drivers/6_beep/beep.o):
