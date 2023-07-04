@@ -31,9 +31,9 @@
 
 /* 中断IO描述结构体 */
 struct irp_keydesc{
-	int gpio;
-	int irqnum;
-	unsigned char value;
+	int gpio;								/* gpio */
+	int irqnum;								/* 中断号 */
+	unsigned char value;					/* 按键对应的健值 */
 	char name[10];
 	irqreturn_t (*handler)(int, void *);
 }
