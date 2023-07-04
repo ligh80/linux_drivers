@@ -25,9 +25,10 @@
 #define CLOSE_CMD		_IO(0XEF, 0X1)
 #define OPEN_CMD		_IO(0XEF, 0X2)
 #define SETPERIOD_CMD	_IOW(0XEF, 0x3, int)
-#define READ_CMD		_IOR(0xEF, 0X4, int)
-#define LEDOFF			0	
-#define LEDON			1
+#define KEY_CNT			1
+#define KEY0_VALUE		0X01
+#define KEY_INV_VALUE	0XFF
+
 
 /* 中断IO描述结构体 */
 struct irp_keydesc{
@@ -36,7 +37,7 @@ struct irp_keydesc{
 	unsigned char value;					/* 按键对应的健值 */
 	char name[10];
 	irqreturn_t (*handler)(int, void *);
-}
+};
 
 /* chardev设备结构体 */
 struct chardev{
@@ -47,17 +48,28 @@ struct chardev{
 	int major;							/* 主设备号 */
 	int minor;							/* 次设备号 */
 	struct device_node *nd;				/* 设备节点 */
-	int dev_gpio_id;					/* 设备所使用的GPIO编号*/
+	int led_gpio_id;					/* 设备所使用的GPIO编号*/
 	int timerperiod;					/* 定时周期，单位为ms */
 	struct timer_list timer;			/* 定义一个定时器 */
 	spinlock_t lock;					/* 定义自旋锁 */
-
+	struct irp_keydesc irqkeydesc[KEY_CNT];	/* 为每一个按键设置一个中断描述 */
+	atomic_t keyvalue;					/* 有效的按键键值 */
+	atomic_t releasekey;	
+	unsigned char curkeynum;	
 };
 
 struct chardev DeviceName;
 
+static irqreturn_t key0_handler(int irq, void *dev_struct)
+{
+	struct chardev *dev = (struct chardev *)dev_struct;		/* 这里有比较大的疑惑 */
+	dev->curkeynum =0;
+	dev->timer.data = (volatile long)dev_struct;
+	mod_timer(&dev->timer, jiffies + msecs_to_jiffies(10));
+	return IRQ_RETVAL(IRQ_HANDLED);
+}
 
-static int led_init(void)
+static int ledio_init(void)
 {
 	int ret = 0;
 	const char *str;
@@ -87,16 +99,16 @@ static int led_init(void)
 		printk("status = %s\r\n", str);
 	}
 	/* 3、获取分配的gpio id号 */
-	DeviceName.dev_gpio_id = of_get_named_gpio(DeviceName.nd, "led-gpio", 0);
-	if(DeviceName.dev_gpio_id < 0){
-		printk("can not get dev_gpio_id!\r\n");
+	DeviceName.led_gpio_id = of_get_named_gpio(DeviceName.nd, "led-gpio", 0);
+	if(DeviceName.led_gpio_id < 0){
+		printk("can not get led_gpio_id!\r\n");
 	} else {
-		printk("dev_gpio_id num = %d\r\n", DeviceName.dev_gpio_id);
+		printk("led_gpio_id num = %d\r\n", DeviceName.led_gpio_id);
 	}
 
 	/* 4、初始化led所使用的IO */
-	gpio_request(DeviceName.dev_gpio_id, DEVICE_NAME);
-	ret = gpio_direction_output(DeviceName.dev_gpio_id, 1);
+	gpio_request(DeviceName.led_gpio_id, DEVICE_NAME);
+	ret = gpio_direction_output(DeviceName.led_gpio_id, 1);
 	if(ret < 0){
 		printk("Set IO Failed!\r\n");
 	} else {
@@ -106,6 +118,50 @@ static int led_init(void)
 	return 0;
 }
 
+static int keyio_init(void)
+{
+	unsigned char i = 0;
+	int ret = 0;
+
+	DeviceName.nd = of_find_node_by_path("/key");
+	/* 提取GPIO */
+	for (i = 0; i <KEY_CNT; i++) {
+		DeviceName.irqkeydesc[i].gpio = of_get_named_gpio(DeviceName.nd, "key-gpio", i);
+		if (DeviceName.irqkeydesc[i].gpio < 0) {
+			printk("can't get key-gpio\r\n");
+		}
+	}	
+
+	/* 初始化key所使用的IO，并且设置成中断模式 */
+	for (i = 0; i < KEY_CNT; i++) {
+		memset(DeviceName.irqkeydesc[i].name, 0, sizeof(DeviceName.irqkeydesc[i].name));
+		sprintf(DeviceName.irqkeydesc[i].name, "KEY%d", i);
+		gpio_request(DeviceName.irqkeydesc[i].gpio, DeviceName.irqkeydesc[i].name);
+		gpio_direction_input(DeviceName.irqkeydesc[i].gpio);
+		/* 这个中断号是芯片设计已经分配好的 */
+		DeviceName.irqkeydesc[i].irqnum = irq_of_parse_and_map(DeviceName.nd, i);
+		printk("key%d: gpio=%d, irqnum=%d\r\n", i, 
+										DeviceName.irqkeydesc[i].gpio,
+										DeviceName.irqkeydesc[i].irqnum);
+	}
+	DeviceName.irqkeydesc[0].handler = key0_handler;
+	DeviceName.irqkeydesc[0].value = KEY0_VALUE;
+
+	/* 申请中断 */
+	for ( i = 0; i < KEY_CNT; i++){
+		ret = request_irq(DeviceName.irqkeydesc[i].irqnum, 
+							DeviceName.irqkeydesc[i].handler,
+							IRQF_TRIGGER_FALLING|IRQF_TRIGGER_RISING, 
+							DeviceName.irqkeydesc[i].name, 
+							&DeviceName);
+		if (ret == 0){
+			printk("irq %d request failed!\r\n", 
+					DeviceName.irqkeydesc[i].irqnum);
+			return -EFAULT;
+		}
+	}
+	return 0;
+}
 /*
  * @description		: 打开设备
  * @param - inode 	: 传递给驱动的inode
@@ -119,7 +175,11 @@ static int timer_open(struct inode *inode, struct file *filp)
 	filp->private_data = &DeviceName;
 
 	DeviceName.timerperiod = 1000;
-	ret = led_init();
+	keyio_init();
+	if(ret < 0){
+		return ret;
+	}
+	ret = ledio_init();
 	if(ret < 0){
 		return ret;
 	}
@@ -143,7 +203,7 @@ static long timer_unlocked_ioctl(struct file *filp,unsigned int cmd,
 	switch (cmd)
 	{
 	case CLOSE_CMD:		/* 关闭定时器 */
-		gpio_set_value(dev->dev_gpio_id, 1);
+		gpio_set_value(dev->led_gpio_id, 1);
 		del_timer_sync(&dev->timer);
 		break;
 	case OPEN_CMD:		/* 打开定时器 */
@@ -198,7 +258,7 @@ void timer_function(unsigned long arg)
 	unsigned long flags;
 
 	sta =! sta;
-	gpio_set_value(dev->dev_gpio_id, sta);
+	gpio_set_value(dev->led_gpio_id, sta);
 
 	/* 重启定时器 */
 	spin_lock_irqsave(&dev->lock, flags);
@@ -243,17 +303,21 @@ static int __init DeviceName_init(void)
 		return PTR_ERR(DeviceName.device);
 	}
 
-	/* 6.初始化timer,设置定时器处理函数，还未设置周期，所以不会激活定时器 */
+	/* 6.初始化timer,设置定时器处理函数，还未设置周期，这里不会激活定时器 */
 	init_timer(&DeviceName.timer);
 	DeviceName.timer.function = timer_function;
 	DeviceName.timer.data = (unsigned long)&DeviceName;
+
+	/* 7.初始化按键 */
+	atomic_set(&DeviceName.keyvalue, KEY_INV_VALUE);
+	atomic_set(&DeviceName.releasekey, 0);
 
 	return 0;
 }
 
 static void __exit DeviceName_exit(void)
 {
-	gpio_set_value(DeviceName.dev_gpio_id, 1);
+	gpio_set_value(DeviceName.led_gpio_id, 1);
 	del_timer_sync(&DeviceName.timer);
 
 	/* 注销字符设备驱动 */
