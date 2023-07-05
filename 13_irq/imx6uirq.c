@@ -21,7 +21,7 @@
 #include <asm/atomic.h>
 
 #define DEVICE_CNT		1
-#define DEVICE_NAME		"DeviceName"
+#define DEVICE_NAME		"irq_dev"
 #define CLOSE_CMD		_IO(0XEF, 0X1)
 #define OPEN_CMD		_IO(0XEF, 0X2)
 #define SETPERIOD_CMD	_IOW(0XEF, 0x3, int)
@@ -34,9 +34,10 @@
 struct irp_keydesc{
 	int gpio;								/* gpio */
 	int irqnum;								/* 中断号 */
-	unsigned char value;					/* 按键对应的健值 */
-	char name[10];
 	irqreturn_t (*handler)(int, void *);
+	unsigned long flags;					/* 中断标志 例如IRQF_TRIGGER_RISING */
+	char name[10];							/* 中断名称 */					
+	unsigned char value;					/* 按键对应的健值 */
 };
 
 /* chardev设备结构体 */
@@ -58,13 +59,13 @@ struct chardev{
 	unsigned char curkeynum;	
 };
 
-struct chardev DeviceName;
+struct chardev ThisDevice;
 
 static irqreturn_t key0_handler(int irq, void *dev_struct)
 {
 	struct chardev *dev = (struct chardev *)dev_struct;		/* 这里有比较大的疑惑 */
 	dev->curkeynum =0;
-	dev->timer.data = (volatile long)dev_struct;
+	dev->timer.data = (volatile long)dev_struct;			/* 给time的私有变量赋值，传递设备结构体，timer_function的arg参数 */
 	mod_timer(&dev->timer, jiffies + msecs_to_jiffies(10));
 	return IRQ_RETVAL(IRQ_HANDLED);
 }
@@ -77,38 +78,38 @@ static int ledio_init(void)
 
 	/* 获取设备树中的属性数据 */
 	/* 1、获取设备节点：gpioled */
-	DeviceName.nd = of_find_node_by_path("/gpioled");
-	if(DeviceName.nd == NULL){
+	ThisDevice.nd = of_find_node_by_path("/gpioled");
+	if(ThisDevice.nd == NULL){
 		printk("gpioled node can not found!\r\n");
 		return -EINVAL;
 	} else {
 		printk("gpioled node has been found!\r\n");
 	}
 	/* 2、获取compatible 属性内容 */
-	proper = of_find_property(DeviceName.nd, "compatible", NULL);
+	proper = of_find_property(ThisDevice.nd, "compatible", NULL);
 	if(proper == NULL){
 		printk("compatible property find failed!\r\n");
 	} else {
 		printk("compatible = %s\r\n", (char*)proper->value);
 	}
 	/* 3、获取status 属性内容 */
-	ret = of_property_read_string(DeviceName.nd, "status", &str);
+	ret = of_property_read_string(ThisDevice.nd, "status", &str);
 	if(ret < 0){
 		printk("status read failed!\r\n");
 	} else {
 		printk("status = %s\r\n", str);
 	}
 	/* 3、获取分配的gpio id号 */
-	DeviceName.led_gpio_id = of_get_named_gpio(DeviceName.nd, "led-gpio", 0);
-	if(DeviceName.led_gpio_id < 0){
+	ThisDevice.led_gpio_id = of_get_named_gpio(ThisDevice.nd, "led-gpio", 0);
+	if(ThisDevice.led_gpio_id < 0){
 		printk("can not get led_gpio_id!\r\n");
 	} else {
-		printk("led_gpio_id num = %d\r\n", DeviceName.led_gpio_id);
+		printk("led_gpio_id num = %d\r\n", ThisDevice.led_gpio_id);
 	}
 
 	/* 4、初始化led所使用的IO */
-	gpio_request(DeviceName.led_gpio_id, DEVICE_NAME);
-	ret = gpio_direction_output(DeviceName.led_gpio_id, 1);
+	gpio_request(ThisDevice.led_gpio_id, DEVICE_NAME);		/* 申请的作用的排除已经有人在使用 */
+	ret = gpio_direction_output(ThisDevice.led_gpio_id, 1);
 	if(ret < 0){
 		printk("Set IO Failed!\r\n");
 	} else {
@@ -122,41 +123,46 @@ static int keyio_init(void)
 {
 	unsigned char i = 0;
 	int ret = 0;
+	u32 InterruptsData[KEY_CNT*2];
 
-	DeviceName.nd = of_find_node_by_path("/key");
+	ThisDevice.nd = of_find_node_by_path("/key");
 	/* 提取GPIO */
 	for (i = 0; i <KEY_CNT; i++) {
-		DeviceName.irqkeydesc[i].gpio = of_get_named_gpio(DeviceName.nd, "key-gpio", i);
-		if (DeviceName.irqkeydesc[i].gpio < 0) {
+		ThisDevice.irqkeydesc[i].gpio = of_get_named_gpio(ThisDevice.nd, "key-gpio", i);
+		if (ThisDevice.irqkeydesc[i].gpio < 0) {
 			printk("can't get key-gpio\r\n");
 		}
 	}	
 
 	/* 初始化key所使用的IO，并且设置成中断模式 */
 	for (i = 0; i < KEY_CNT; i++) {
-		memset(DeviceName.irqkeydesc[i].name, 0, sizeof(DeviceName.irqkeydesc[i].name));
-		sprintf(DeviceName.irqkeydesc[i].name, "KEY%d", i);
-		gpio_request(DeviceName.irqkeydesc[i].gpio, DeviceName.irqkeydesc[i].name);
-		gpio_direction_input(DeviceName.irqkeydesc[i].gpio);
-		/* 这个中断号是芯片设计已经分配好的 */
-		DeviceName.irqkeydesc[i].irqnum = irq_of_parse_and_map(DeviceName.nd, i);
-		printk("key%d: gpio=%d, irqnum=%d\r\n", i, 
-										DeviceName.irqkeydesc[i].gpio,
-										DeviceName.irqkeydesc[i].irqnum);
+		memset(ThisDevice.irqkeydesc[i].name, 0, sizeof(ThisDevice.irqkeydesc[i].name));
+		sprintf(ThisDevice.irqkeydesc[i].name, "KEY%d", i);
+		gpio_request(ThisDevice.irqkeydesc[i].gpio, ThisDevice.irqkeydesc[i].name);
+		gpio_direction_input(ThisDevice.irqkeydesc[i].gpio);
+		/* 这个中断号是芯片设计已经分配好的,根据设备树节点里的interupts，查询map获取 */
+		ThisDevice.irqkeydesc[i].irqnum = irq_of_parse_and_map(ThisDevice.nd, i);
+		of_property_read_u32_array(ThisDevice.nd, "interrupts", InterruptsData, KEY_CNT*2);
+		ThisDevice.irqkeydesc[i].flags = InterruptsData[1+i*2];
 	}
-	DeviceName.irqkeydesc[0].handler = key0_handler;
-	DeviceName.irqkeydesc[0].value = KEY0_VALUE;
+	ThisDevice.irqkeydesc[0].handler = key0_handler;
+	ThisDevice.irqkeydesc[0].value = KEY0_VALUE;
 
 	/* 申请中断 */
 	for ( i = 0; i < KEY_CNT; i++){
-		ret = request_irq(DeviceName.irqkeydesc[i].irqnum, 
-							DeviceName.irqkeydesc[i].handler,
-							IRQF_TRIGGER_FALLING|IRQF_TRIGGER_RISING, 
-							DeviceName.irqkeydesc[i].name, 
-							&DeviceName);
-		if (ret == 0){
+		ret = request_irq(ThisDevice.irqkeydesc[i].irqnum, 
+							ThisDevice.irqkeydesc[i].handler,
+							ThisDevice.irqkeydesc[i].flags, 
+							ThisDevice.irqkeydesc[i].name, 
+							&ThisDevice);
+		printk("request_irq index:%d, name:%s gpio=%d, irqnum=%d, flags=%ld\r\n", i, 
+										ThisDevice.irqkeydesc[i].name,
+										ThisDevice.irqkeydesc[i].gpio,
+										ThisDevice.irqkeydesc[i].irqnum,
+										ThisDevice.irqkeydesc[i].flags);
+		if (ret < 0){
 			printk("irq %d request failed!\r\n", 
-					DeviceName.irqkeydesc[i].irqnum);
+					ThisDevice.irqkeydesc[i].irqnum);
 			return -EFAULT;
 		}
 	}
@@ -169,20 +175,12 @@ static int keyio_init(void)
  * 					  一般在open的时候将private_data指向设备结构体。
  * @return 			: 0 成功;其他 失败
  */
-static int timer_open(struct inode *inode, struct file *filp)
+static int ThisDevice_open(struct inode *inode, struct file *filp)
 {
-	int ret = 0;
-	filp->private_data = &DeviceName;
+	filp->private_data = &ThisDevice;
 
-	DeviceName.timerperiod = 1000;
-	keyio_init();
-	if(ret < 0){
-		return ret;
-	}
-	ret = ledio_init();
-	if(ret < 0){
-		return ret;
-	}
+	ThisDevice.timerperiod = 1000;
+
 	return 0;
 }
 
@@ -193,7 +191,7 @@ static int timer_open(struct inode *inode, struct file *filp)
 * @param - arg : 参数
 * @return : 0 成功;其他 失败
 */
-static long timer_unlocked_ioctl(struct file *filp,unsigned int cmd,
+static long ThisDevice_unlocked_ioctl(struct file *filp,unsigned int cmd,
 			unsigned long arg)
 {
 	struct chardev *dev = (struct chardev *)filp->private_data;
@@ -224,113 +222,157 @@ static long timer_unlocked_ioctl(struct file *filp,unsigned int cmd,
 	return 0;
 }
 
-static ssize_t timer_read(struct file *filp, __user char *buf, size_t count,
+static ssize_t ThisDevice_read(struct file *filp, __user char *buf, size_t count,
 			loff_t *ppos)
 {
+	int ret = 0;
+	unsigned char keyvalue = 0;
+	unsigned char releasekey = 0;
+	struct chardev *dev = (struct chardev *)filp->private_data;
+
+	keyvalue = atomic_read(&dev->keyvalue);
+	releasekey = atomic_read(&dev->releasekey);
+
+	if (releasekey) {		/* 有键按下且已经释放，且未读取 */
+		if (keyvalue & 0x80) {
+			keyvalue &= ~0x80;
+			ret = copy_to_user(buf, &keyvalue, sizeof(keyvalue));
+		} else {
+			goto data_error;
+		}
+		atomic_set(&dev->releasekey, 0);	/* 按下键且释放标记清零 */
+	} else {
+		goto data_error;
+	}
+	
 	return 0;
+
+data_error:
+	return -EINVAL;
 }
 
-static ssize_t timer_write(struct file *filp, const char __user *buf,
+static ssize_t ThisDevice_write(struct file *filp, const char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	return 0;
 }
 
-static int timer_release(struct inode *inode, struct file *filp)
+static int ThisDevice_release(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
 
-static const struct file_operations DeviceName_fops={
+static const struct file_operations ThisDevice_fops={
 	.owner = THIS_MODULE,
-	.open = timer_open,
-	.release = timer_release,
-	.read = timer_read,
-	.write = timer_write,
-	.unlocked_ioctl = timer_unlocked_ioctl,
+	.open = ThisDevice_open,
+	.release = ThisDevice_release,
+	.read = ThisDevice_read,
+	.write = ThisDevice_write,
+	.unlocked_ioctl = ThisDevice_unlocked_ioctl,
 };
 
 void timer_function(unsigned long arg)
 {
 	struct chardev *dev = (struct chardev *)arg;
-	static int sta = 1;
-	int timerperiod;
-	unsigned long flags;
+	unsigned char value;
+	unsigned char num;
+	struct irp_keydesc *keydesc;
 
-	sta =! sta;
-	gpio_set_value(dev->led_gpio_id, sta);
-
-	/* 重启定时器 */
-	spin_lock_irqsave(&dev->lock, flags);
-	timerperiod = dev->timerperiod;
-	spin_unlock_irqrestore(&dev->lock, flags);
-	mod_timer(&dev->timer, jiffies + msecs_to_jiffies(timerperiod));
+	/* 定时器10ms防抖定时处理 */
+	num = dev->curkeynum;		/* 确认是哪一个按键的中断,理解成索引值 */
+	keydesc = &dev->irqkeydesc[num];
+	value = gpio_get_value(keydesc->gpio);	/* 10ms后该引脚的状态 */
+	if (value == 0){						/* 按键按下 */	
+		atomic_set(&dev->keyvalue, keydesc->value);
+		gpio_set_value(ThisDevice.led_gpio_id, 0);	/* 打开led */
+	} else {								/* 按键松开 */
+		atomic_set(&dev->keyvalue, 0x80 | keydesc->value);		/* 这里为什么要或0x80？ */	
+		atomic_set(&dev->releasekey, 1);						/* 标记按键按下后已经松开 */
+		gpio_set_value(ThisDevice.led_gpio_id, 1);	/* 关闭led */
+	}
 }
 
-static int __init DeviceName_init(void)
+static int __init ThisDevice_init(void)
 {	
+	int ret = 0;
 	/* 初始化自旋锁 */
-	spin_lock_init(&DeviceName.lock);
+	spin_lock_init(&ThisDevice.lock);
 
 	/* 注册字符设备驱动 */
 	/* 1.创建设备号 */
-	if(DeviceName.major){
-		DeviceName.devid = MKDEV(DeviceName.major, 0);
-		register_chrdev_region(DeviceName.devid, DEVICE_CNT, DEVICE_NAME);
+	if(ThisDevice.major){
+		ThisDevice.devid = MKDEV(ThisDevice.major, 0);
+		register_chrdev_region(ThisDevice.devid, DEVICE_CNT, DEVICE_NAME);
 	}else{
-		alloc_chrdev_region(&DeviceName.devid, 0, DEVICE_CNT, DEVICE_NAME);
-		DeviceName.major = MAJOR(DeviceName.devid);
-		DeviceName.minor = MINOR(DeviceName.devid);
+		alloc_chrdev_region(&ThisDevice.devid, 0, DEVICE_CNT, DEVICE_NAME);
+		ThisDevice.major = MAJOR(ThisDevice.devid);
+		ThisDevice.minor = MINOR(ThisDevice.devid);
 	}
-	printk("DeviceName major = %d, minor = %d\r\n", DeviceName.major, DeviceName.minor);
+	printk("ThisDevice major = %d, minor = %d\r\n", ThisDevice.major, ThisDevice.minor);
 	
 	/* 2.初始化cdev */
-	DeviceName.cdev.owner = THIS_MODULE;
-	cdev_init(&DeviceName.cdev, &DeviceName_fops);
+	ThisDevice.cdev.owner = THIS_MODULE;
+	cdev_init(&ThisDevice.cdev, &ThisDevice_fops);
 
 	/* 3.添加cdev */
-	cdev_add(&DeviceName.cdev, DeviceName.devid, DEVICE_CNT);
+	cdev_add(&ThisDevice.cdev, ThisDevice.devid, DEVICE_CNT);
 
 	/* 4.创造类 */
-	DeviceName.class = class_create(THIS_MODULE, DEVICE_NAME);
-	if (IS_ERR(DeviceName.class)){
-		return PTR_ERR(DeviceName.class);
+	ThisDevice.class = class_create(THIS_MODULE, DEVICE_NAME);
+	if (IS_ERR(ThisDevice.class)){
+		return PTR_ERR(ThisDevice.class);
 	}
 
 	/* 5.创建设备 */
-	DeviceName.device = device_create(DeviceName.class, NULL, DeviceName.devid, NULL, DEVICE_NAME);
-	if (IS_ERR(DeviceName.device)){
-		return PTR_ERR(DeviceName.device);
+	ThisDevice.device = device_create(ThisDevice.class, NULL, ThisDevice.devid, NULL, DEVICE_NAME);
+	if (IS_ERR(ThisDevice.device)){
+		return PTR_ERR(ThisDevice.device);
 	}
 
 	/* 6.初始化timer,设置定时器处理函数，还未设置周期，这里不会激活定时器 */
-	init_timer(&DeviceName.timer);
-	DeviceName.timer.function = timer_function;
-	DeviceName.timer.data = (unsigned long)&DeviceName;
+	init_timer(&ThisDevice.timer);
+	ThisDevice.timer.function = timer_function;
+	ThisDevice.timer.data = (unsigned long)&ThisDevice;
 
 	/* 7.初始化按键 */
-	atomic_set(&DeviceName.keyvalue, KEY_INV_VALUE);
-	atomic_set(&DeviceName.releasekey, 0);
+	atomic_set(&ThisDevice.keyvalue, KEY_INV_VALUE);
+	atomic_set(&ThisDevice.releasekey, 0);
 
+	ret = keyio_init();
+	if(ret < 0){
+		return ret;
+	}
+	ret = ledio_init();
+	if(ret < 0){
+		return ret;
+	}	
 	return 0;
 }
 
-static void __exit DeviceName_exit(void)
-{
-	gpio_set_value(DeviceName.led_gpio_id, 1);
-	del_timer_sync(&DeviceName.timer);
+static void __exit ThisDevice_exit(void)
+{	
+	unsigned int i = 0;
+
+	gpio_set_value(ThisDevice.led_gpio_id, 1);	/* 关闭led */
+	del_timer_sync(&ThisDevice.timer);			/* 删除定时器 */
+	gpio_free(ThisDevice.led_gpio_id);			/* 释放led的gpio标号 */
+
+	for (i = 0; i < KEY_CNT; i++){
+		free_irq(ThisDevice.irqkeydesc[i].irqnum, &ThisDevice); /* 释放中断函数 */
+		gpio_free(ThisDevice.irqkeydesc[i].gpio);				
+	}
 
 	/* 注销字符设备驱动 */
-	cdev_del(&DeviceName.cdev);
-	unregister_chrdev_region(DeviceName.devid, DEVICE_CNT);
-	device_destroy(DeviceName.class, DeviceName.devid);
-	class_destroy(DeviceName.class);
+	cdev_del(&ThisDevice.cdev);
+	unregister_chrdev_region(ThisDevice.devid, DEVICE_CNT);
+	device_destroy(ThisDevice.class, ThisDevice.devid);
+	class_destroy(ThisDevice.class);
 
-	printk("DeviceName exit!\n");
+	printk("ThisDevice exit!\n");
 }
 
-module_init(DeviceName_init);
-module_exit(DeviceName_exit);
+module_init(ThisDevice_init);
+module_exit(ThisDevice_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("ligh");
