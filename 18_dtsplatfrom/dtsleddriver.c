@@ -168,7 +168,7 @@ static int pf_ThisDriver_remove(struct platform_device *pf_dev)
 	class_destroy(ThisDriver.class);	
 	return 0;
 }
-
+/* 这个match非常关键，查询设备设备树中有无对应的设备信息，进而触发probe函数 */
 static const struct of_device_id pf_ThisDriver_of_match[] = {
 	{ .compatible = "atkalpha-gpioled" },
 	{	}

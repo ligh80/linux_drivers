@@ -1,0 +1,1 @@
+cmd_/home/ligh/linux/IMX6ULL/linux_drivers/19_miscbeep/miscbeep.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/ligh/linux/IMX6ULL/linux_drivers/19_miscbeep/miscbeep.ko /home/ligh/linux/IMX6ULL/linux_drivers/19_miscbeep/miscbeep.o /home/ligh/linux/IMX6ULL/linux_drivers/19_miscbeep/miscbeep.mod.o
