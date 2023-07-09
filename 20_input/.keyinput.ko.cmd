@@ -1,0 +1,1 @@
+cmd_/home/ligh/linux/IMX6ULL/linux_drivers/20_input/keyinput.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/ligh/linux/IMX6ULL/linux_drivers/20_input/keyinput.ko /home/ligh/linux/IMX6ULL/linux_drivers/20_input/keyinput.o /home/ligh/linux/IMX6ULL/linux_drivers/20_input/keyinput.mod.o
