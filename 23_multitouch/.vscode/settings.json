@@ -19,9 +19,6 @@
         "Documentation":true, 
     },
     "files.associations": {
-        "irq.h": "c",
-        "ratelimit.h": "c",
-        "platform_device.h": "c",
-        "edt-ft5x06.h": "c"
+        "irq.h": "c"
     }
 }
