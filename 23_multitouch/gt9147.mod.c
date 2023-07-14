@@ -20,6 +20,7 @@ __attribute__((section("__versions"))) = {
 	{ 0xfa985410, __VMLINUX_SYMBOL_STR(module_layout) },
 	{ 0xab5c8cb5, __VMLINUX_SYMBOL_STR(i2c_del_driver) },
 	{ 0x19bdcb34, __VMLINUX_SYMBOL_STR(i2c_register_driver) },
+	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
 	{ 0x2770f6b8, __VMLINUX_SYMBOL_STR(devm_request_threaded_irq) },
 	{ 0xe3c07ed7, __VMLINUX_SYMBOL_STR(input_register_device) },
 	{ 0x1352f55c, __VMLINUX_SYMBOL_STR(devm_gpio_request_one) },
@@ -35,7 +36,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x389329b3, __VMLINUX_SYMBOL_STR(gpiod_set_raw_value) },
 	{ 0x3089e8ae, __VMLINUX_SYMBOL_STR(gpio_to_desc) },
 	{ 0xde6fb46c, __VMLINUX_SYMBOL_STR(of_get_named_gpio_flags) },
-	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
 	{ 0x1005a311, __VMLINUX_SYMBOL_STR(input_mt_report_pointer_emulation) },
 	{ 0xddaa6aba, __VMLINUX_SYMBOL_STR(input_mt_report_slot_state) },
 	{ 0x8e117d54, __VMLINUX_SYMBOL_STR(input_event) },
@@ -50,4 +50,4 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "D3DF9145EBE579A0C99D76C");
+MODULE_INFO(srcversion, "CD3E85BAB8D47F022A85BAC");

@@ -183,7 +183,6 @@ static irqreturn_t gt9147_irq_handler(int irq, void *dev_id)
         if(id == 0) {
             input_x  = touch_data[1] | (touch_data[2] << 8);
             input_y  = touch_data[3] | (touch_data[4] << 8);
-			printk("id:%d\n", id);
             input_mt_slot(dev->input, 5);
 		    input_mt_report_slot_state(dev->input, MT_TOOL_FINGER, true);
 		    input_report_abs(dev->input, ABS_MT_POSITION_X, input_x);
